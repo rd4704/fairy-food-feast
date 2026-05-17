@@ -1,0 +1,1453 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="theme-color" content="#ff79c6" />
+<link rel="manifest" href="manifest.json" />
+<link rel="apple-touch-icon" href="icons/icon-192.png" />
+<title>🧚 Fairy Food Feast</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  html, body {
+    width: 100%; height: 100%; overflow: hidden;
+    background: #ffe8f5;
+    font-family: "Comic Sans MS", "Chalkboard SE", "Quicksand", system-ui, sans-serif;
+    user-select: none; -webkit-user-select: none; touch-action: none;
+    overscroll-behavior: none;
+  }
+  #game { display: block; width: 100vw; height: 100vh; touch-action: none; }
+  .overlay {
+    position: fixed; inset: 0; display: none; flex-direction: column;
+    align-items: center; justify-content: center; text-align: center;
+    padding: 24px; z-index: 10; color: #4a1b54;
+    background: radial-gradient(circle at 50% 30%, #ffd1f0 0%, #ffe8f5 60%, #ffd6e8 100%);
+  }
+  .overlay.show { display: flex; }
+  /* Recipe book needs to scroll when there are many recipes */
+  #screen-book {
+    justify-content: flex-start;
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding-top: max(24px, env(safe-area-inset-top));
+    padding-bottom: max(40px, env(safe-area-inset-bottom));
+    -webkit-overflow-scrolling: touch;
+    touch-action: pan-y;
+    overscroll-behavior: contain;
+  }
+  #screen-book.show { display: flex; }
+  #screen-book h1 { flex-shrink: 0; }
+  #screen-book #book-content { flex-shrink: 0; }
+  #screen-book .btn-row {
+    position: sticky;
+    bottom: 0;
+    padding: 14px 0 6px;
+    background: linear-gradient(180deg, rgba(255,232,245,0) 0%, rgba(255,232,245,.95) 40%, rgba(255,232,245,1) 100%);
+    width: 100%;
+    margin-top: auto;
+  }
+  .overlay h1 {
+    font-size: clamp(36px, 8vw, 72px);
+    text-shadow: 2px 2px 0 #fff, 4px 4px 0 #ff79c6;
+    margin-bottom: 12px; color: #ff3aa1;
+    animation: wobble 2.5s ease-in-out infinite;
+  }
+  .overlay h2 { font-size: clamp(22px, 4vw, 36px); margin-bottom: 18px; color: #7e2a8f; }
+  .overlay p { font-size: clamp(16px, 3vw, 22px); margin: 8px 0 18px; max-width: 520px; }
+  .btn {
+    background: linear-gradient(180deg, #ff8fd0 0%, #ff3aa1 100%);
+    color: #fff; border: none; padding: 16px 32px;
+    font-size: clamp(18px, 3vw, 24px); font-weight: bold;
+    border-radius: 999px; cursor: pointer;
+    box-shadow: 0 6px 0 #b8267a, 0 10px 20px rgba(255,58,161,.4);
+    font-family: inherit;
+    transition: transform .12s ease;
+  }
+  .btn:active { transform: translateY(3px); box-shadow: 0 3px 0 #b8267a, 0 5px 10px rgba(255,58,161,.4); }
+  .btn.secondary {
+    background: linear-gradient(180deg, #b48cff 0%, #7e2a8f 100%);
+    box-shadow: 0 6px 0 #4f1764, 0 10px 20px rgba(126,42,143,.4);
+  }
+  .btn.secondary:active { box-shadow: 0 3px 0 #4f1764, 0 5px 10px rgba(126,42,143,.4); }
+  .btn-row { display: flex; gap: 14px; flex-wrap: wrap; justify-content: center; margin-top: 16px; }
+  .recipe-card {
+    background: rgba(255,255,255,.85); border: 4px dashed #ff79c6;
+    border-radius: 24px; padding: 18px 24px; margin: 16px 0;
+    box-shadow: 0 10px 30px rgba(255,58,161,.25);
+    animation: flip-in .8s ease-out;
+  }
+  .recipe-card .emojis { font-size: clamp(36px, 7vw, 60px); letter-spacing: 6px; }
+  .recipe-card .label { font-size: clamp(18px, 3vw, 26px); color: #7e2a8f; margin-top: 8px; }
+  .levels-grid {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 14px; max-width: 720px; width: 100%; margin-top: 12px;
+  }
+  .level-card {
+    background: rgba(255,255,255,.9); border-radius: 18px; padding: 14px;
+    border: 3px solid #ff79c6; cursor: pointer; transition: transform .12s;
+    font-size: 18px; color: #7e2a8f; font-weight: bold;
+  }
+  .level-card .lvl-emoji { font-size: 36px; display: block; margin-bottom: 6px; }
+  .level-card.locked { opacity: .45; border-color: #aaa; color: #888; cursor: not-allowed; }
+  .level-card:not(.locked):active { transform: scale(.96); }
+  .footer-note { margin-top: 18px; font-size: 14px; color: #7e2a8f; opacity: .8; }
+  .confetti-layer {
+    position: fixed; inset: 0; pointer-events: none; z-index: 5;
+  }
+  @keyframes wobble {
+    0%,100% { transform: rotate(-2deg) scale(1); }
+    50%     { transform: rotate(2deg) scale(1.04); }
+  }
+  @keyframes flip-in {
+    0%   { transform: perspective(600px) rotateY(90deg); opacity: 0; }
+    100% { transform: perspective(600px) rotateY(0deg);  opacity: 1; }
+  }
+  @keyframes pop {
+    0%   { transform: scale(0); }
+    60%  { transform: scale(1.15); }
+    100% { transform: scale(1); }
+  }
+  .pop { animation: pop .4s ease-out; }
+</style>
+</head>
+<body>
+
+<canvas id="game"></canvas>
+
+<!-- START SCREEN -->
+<div id="screen-start" class="overlay show">
+  <h1>🧚 Fairy Food Feast 🍓</h1>
+  <p>Help the fairy catch the right magical ingredients to cook up yummy fairy recipes! Tap falling foods — but watch out for icky things!</p>
+  <div class="btn-row">
+    <button class="btn" id="btn-start">✨ Start Playing</button>
+    <button class="btn secondary" id="btn-recipes">📖 Recipe Book</button>
+  </div>
+  <p class="footer-note">Made with love for Eva 💖</p>
+</div>
+
+<!-- LEVEL SELECT -->
+<div id="screen-levels" class="overlay">
+  <h1>Pick a Recipe</h1>
+  <div class="levels-grid" id="levels-grid"></div>
+  <div class="btn-row">
+    <button class="btn secondary" id="btn-levels-back">← Back</button>
+  </div>
+</div>
+
+<!-- SERVING SCENE (canvas does the heavy lifting; this overlay shows the hint) -->
+<div id="screen-serving" class="overlay" style="background: transparent; pointer-events: none;">
+  <div style="flex:1"></div>
+  <div id="serving-hint"
+       style="opacity:0; transition: opacity .6s; pointer-events:auto;
+              background: rgba(255,255,255,.85); color:#7e2a8f;
+              padding: 12px 22px; border-radius: 999px;
+              font-weight: bold; font-size: clamp(16px, 2.6vw, 20px);
+              box-shadow: 0 6px 20px rgba(126,42,143,.3);
+              margin-bottom: 32px; animation: wobble 2s ease-in-out infinite;">
+    ✨ Tap anywhere to continue ✨
+  </div>
+</div>
+
+<!-- WIN SCREEN -->
+<div id="screen-win" class="overlay">
+  <h1>Amazing, Eva! 🌟</h1>
+  <h2 id="win-recipe-name">Magic Cupcake unlocked!</h2>
+  <div class="recipe-card" id="win-recipe-card">
+    <div class="emojis" id="win-recipe-emojis">🥚 🧈 🍓 ⭐ 🍫</div>
+    <div class="label">A delicious fairy treat!</div>
+  </div>
+  <div class="btn-row" id="win-buttons" style="opacity:0; transition: opacity .5s;">
+    <button class="btn" id="btn-next">Next Level →</button>
+    <button class="btn secondary" id="btn-win-home">🏠 Home</button>
+  </div>
+</div>
+
+<!-- GAME OVER -->
+<div id="screen-gameover" class="overlay">
+  <h1>Oh no! 💔</h1>
+  <h2 id="gameover-msg">The fairy ran out of time...</h2>
+  <p id="gameover-score">Score: 0</p>
+  <div class="btn-row">
+    <button class="btn" id="btn-retry">🔁 Try Again</button>
+    <button class="btn secondary" id="btn-go-home">🏠 Home</button>
+  </div>
+</div>
+
+<!-- RECIPE BOOK -->
+<div id="screen-book" class="overlay">
+  <h1>📖 Recipe Book</h1>
+  <div id="book-content" style="max-width: 720px; width:100%;"></div>
+  <div class="btn-row">
+    <button class="btn secondary" id="btn-book-back">← Back</button>
+  </div>
+</div>
+
+<script>
+/* =========================================================
+   🧚 FAIRY FOOD FEAST
+   Single-file canvas game
+   ========================================================= */
+
+// ---------- Canvas Setup ----------
+const canvas = document.getElementById('game');
+const ctx = canvas.getContext('2d');
+let W = 0, H = 0, DPR = Math.min(window.devicePixelRatio || 1, 2);
+
+function resize() {
+  DPR = Math.min(window.devicePixelRatio || 1, 2);
+  W = window.innerWidth;
+  H = window.innerHeight;
+  canvas.width = W * DPR;
+  canvas.height = H * DPR;
+  canvas.style.width = W + 'px';
+  canvas.style.height = H + 'px';
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+}
+window.addEventListener('resize', resize);
+window.addEventListener('orientationchange', resize);
+resize();
+
+// ---------- Audio ----------
+let AudioCtxRef = null;
+function audio() {
+  if (!AudioCtxRef) {
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (AC) AudioCtxRef = new AC();
+  }
+  return AudioCtxRef;
+}
+function tone(freq, duration = 0.2, type = 'sine', vol = 0.25, slideTo = null) {
+  const ac = audio(); if (!ac) return;
+  const osc = ac.createOscillator();
+  const gain = ac.createGain();
+  osc.type = type;
+  osc.frequency.value = freq;
+  if (slideTo) osc.frequency.exponentialRampToValueAtTime(slideTo, ac.currentTime + duration);
+  gain.gain.setValueAtTime(vol, ac.currentTime);
+  gain.gain.exponentialRampToValueAtTime(0.001, ac.currentTime + duration);
+  osc.connect(gain); gain.connect(ac.destination);
+  osc.start(); osc.stop(ac.currentTime + duration + 0.02);
+}
+function playChime() {
+  // bright ascending arpeggio
+  tone(523, 0.12, 'triangle', 0.25);
+  setTimeout(() => tone(659, 0.12, 'triangle', 0.25), 70);
+  setTimeout(() => tone(784, 0.18, 'triangle', 0.25), 140);
+}
+function playWrong() {
+  tone(220, 0.25, 'sawtooth', 0.2, 80);
+}
+function playMiss() {
+  tone(160, 0.18, 'sine', 0.18, 90);
+}
+function playFanfare() {
+  const notes = [523, 659, 784, 1046];
+  notes.forEach((n, i) => setTimeout(() => tone(n, 0.18, 'triangle', 0.3), i * 130));
+  setTimeout(() => { tone(784, 0.3, 'triangle', 0.3); tone(1046, 0.4, 'triangle', 0.25); }, 600);
+}
+function playGameOver() {
+  const notes = [440, 392, 349, 294];
+  notes.forEach((n, i) => setTimeout(() => tone(n, 0.3, 'sine', 0.25), i * 200));
+}
+
+// ---------- Recipes ----------
+const RECIPES = [
+  {
+    id: 'cupcake',
+    name: 'Magic Cupcake',
+    icon: '🧁',
+    needed: ['🥚', '🧈', '🍓', '⭐', '🍫'],
+    wrong:  ['🐸', '🥾', '🧦', '🪲', '🧅', '🦴'],
+    bg: ['#fff3b0', '#ffd6f0'],
+    fall: 90,        // px/sec
+    spawnEvery: 1500, // ms
+    wrongPct: 0.20,
+    time: 45
+  },
+  {
+    id: 'pizza',
+    name: 'Fairy Pizza',
+    icon: '🍕',
+    needed: ['🍅', '🧀', '🍄', '🌿', '🫑'],
+    wrong:  ['🐛', '🦷', '🧼', '🥾', '🪨'],
+    bg: ['#ffd5b3', '#ffb380'],
+    fall: 115,
+    spawnEvery: 1200,
+    wrongPct: 0.30,
+    time: 40
+  },
+  {
+    id: 'smoothie',
+    name: 'Star Smoothie',
+    icon: '🥤',
+    needed: ['🍓', '🍌', '🫐', '🥥', '⭐'],
+    wrong:  ['🧅', '🌶️', '🦠', '🥾', '🧦'],
+    bg: ['#1a1147', '#5a3aa1'],
+    fall: 140,
+    spawnEvery: 1000,
+    wrongPct: 0.35,
+    time: 35
+  },
+  {
+    id: 'potion',
+    name: 'Potion Soup',
+    icon: '🧪',
+    needed: ['🍄', '🐍', '🦎', '🌿', '💎'],
+    wrong:  ['🧦', '🥾', '🦷', '🪲', '🦴', '🧅'],
+    bg: ['#2d1b4e', '#1a3a2e'],
+    fall: 170,
+    spawnEvery: 850,
+    wrongPct: 0.40,
+    time: 30
+  },
+  {
+    id: 'rainbow',
+    name: 'Rainbow Cake',
+    icon: '🌈',
+    needed: ['🍓', '🍊', '🍋', '🥝', '🫐'],
+    wrong:  ['🐸', '🪲', '🦴', '🧅', '🧼', '🥾'],
+    bg: ['#ffb3e0', '#b3d9ff'],
+    fall: 195,
+    spawnEvery: 720,
+    wrongPct: 0.45,
+    time: 30
+  },
+  {
+    id: 'sandwich',
+    name: 'Fairy Sandwich',
+    icon: '🥪',
+    needed: ['🍞', '🥬', '🍅', '🧀', '🥚'],
+    wrong:  ['🐛', '🪲', '🦴', '🧦', '🥾'],
+    bg: ['#e8f5d0', '#fff5b8'],
+    fall: 210,
+    spawnEvery: 700,
+    wrongPct: 0.45,
+    time: 30
+  },
+  {
+    id: 'donuts',
+    name: 'Sparkle Donuts',
+    icon: '🍩',
+    needed: ['🍩', '🍓', '🍒', '🍯', '⭐'],
+    wrong:  ['🧅', '🥾', '🧼', '🦠', '🦴'],
+    bg: ['#ffd6e8', '#fff0d6'],
+    fall: 225,
+    spawnEvery: 680,
+    wrongPct: 0.48,
+    time: 28
+  },
+  {
+    id: 'sushi',
+    name: 'Sushi Magic',
+    icon: '🍣',
+    needed: ['🍣', '🍙', '🥑', '🥒', '🍤'],
+    wrong:  ['🐌', '🪨', '🦴', '🧦', '🐛'],
+    bg: ['#c8e8e0', '#ffd4c2'],
+    fall: 240,
+    spawnEvery: 650,
+    wrongPct: 0.50,
+    time: 28
+  },
+  {
+    id: 'tea',
+    name: 'Fairy Tea Party',
+    icon: '🍵',
+    needed: ['🍵', '🍪', '🍯', '🍋', '🌿'],
+    wrong:  ['🥾', '🦴', '🧅', '🪲', '🦷'],
+    bg: ['#d4f0d8', '#e0d4f0'],
+    fall: 255,
+    spawnEvery: 620,
+    wrongPct: 0.52,
+    time: 26
+  },
+  {
+    id: 'sundae',
+    name: 'Galaxy Sundae',
+    icon: '🍨',
+    needed: ['🍨', '🍒', '🍫', '🍓', '⭐'],
+    wrong:  ['🌶️', '🧅', '🦠', '🥾', '🦷'],
+    bg: ['#1a0a3a', '#ff6ad5'],
+    fall: 275,
+    spawnEvery: 580,
+    wrongPct: 0.55,
+    time: 25
+  }
+];
+
+// ---------- Game State ----------
+const STATES = { START: 'start', PLAYING: 'playing', SERVING: 'serving', LEVEL_WIN: 'win', GAME_OVER: 'over' };
+let state = STATES.START;
+let serving = null; // serving-scene state
+
+const SAVE_KEY = 'fairyFoodFeast.v1';
+function loadSave() {
+  try { return JSON.parse(localStorage.getItem(SAVE_KEY)) || { unlocked: 1, hiScore: 0 }; }
+  catch { return { unlocked: 1, hiScore: 0 }; }
+}
+function saveProgress() {
+  try { localStorage.setItem(SAVE_KEY, JSON.stringify(save)); } catch {}
+}
+let save = loadSave();
+
+let game = null;
+function newGame(levelIdx) {
+  const recipe = RECIPES[levelIdx];
+  game = {
+    levelIdx,
+    recipe,
+    ingredients: [],
+    particles: [],
+    score: 0,
+    lives: 3,
+    timeLeft: recipe.time,
+    lastSpawn: 0,
+    caughtCount: 0,                 // count of needed ingredients caught
+    caughtSet: new Set(),           // which needed emoji caught at least once
+    fairy: {
+      x: W - 70, y: 90,
+      bobT: 0, mood: 'idle', moodT: 0
+    },
+    startedAt: performance.now(),
+    bgGradient: recipe.bg
+  };
+}
+
+// ---------- Ingredients ----------
+function spawnIngredient() {
+  const r = game.recipe;
+  const isCorrect = Math.random() > r.wrongPct;
+  const pool = isCorrect ? r.needed : r.wrong;
+  const emoji = pool[Math.floor(Math.random() * pool.length)];
+  const size = 44 + Math.random() * 18;
+  game.ingredients.push({
+    emoji,
+    x: 30 + Math.random() * (W - 60),
+    y: -50,
+    vy: r.fall * (0.85 + Math.random() * 0.4),
+    vx: (Math.random() - 0.5) * 40,
+    rot: Math.random() * Math.PI * 2,
+    vr: (Math.random() - 0.5) * 2.5,
+    size,
+    isCorrect,
+    caught: false,
+    missed: false
+  });
+}
+
+function updateIngredients(dt) {
+  const HUD_BOTTOM = H - 60;
+  for (const it of game.ingredients) {
+    if (it.caught || it.missed) continue;
+    it.x += it.vx * dt;
+    it.y += it.vy * dt;
+    it.rot += it.vr * dt;
+    // bounce off side walls a bit
+    if (it.x < 20) { it.x = 20; it.vx = Math.abs(it.vx); }
+    if (it.x > W - 20) { it.x = W - 20; it.vx = -Math.abs(it.vx); }
+    if (it.y > HUD_BOTTOM) {
+      it.missed = true;
+      if (it.isCorrect) {
+        game.lives--;
+        burst(it.x, HUD_BOTTOM - 20, '#888', 8, 'puff');
+        playMiss();
+        flashFairy('sad');
+        if (game.lives <= 0) endGame(false);
+      } else {
+        // missed wrong items are fine — small grey puff
+        burst(it.x, HUD_BOTTOM - 20, '#bbb', 4, 'puff');
+      }
+    }
+  }
+  // cleanup
+  game.ingredients = game.ingredients.filter(i => !(i.missed) && !(i.caught && i.fadeDone));
+}
+
+// ---------- Particles ----------
+function burst(x, y, color, count = 18, kind = 'spark') {
+  for (let i = 0; i < count; i++) {
+    const a = Math.random() * Math.PI * 2;
+    const s = 80 + Math.random() * 220;
+    game.particles.push({
+      x, y,
+      vx: Math.cos(a) * s,
+      vy: Math.sin(a) * s - (kind === 'puff' ? 40 : 80),
+      g: kind === 'puff' ? 80 : 380,
+      life: 0.6 + Math.random() * 0.5,
+      age: 0,
+      color, size: 3 + Math.random() * 4,
+      kind
+    });
+  }
+}
+function updateParticles(dt) {
+  for (const p of game.particles) {
+    p.age += dt;
+    p.vy += p.g * dt;
+    p.x += p.vx * dt;
+    p.y += p.vy * dt;
+  }
+  game.particles = game.particles.filter(p => p.age < p.life);
+}
+function drawParticles() {
+  for (const p of game.particles) {
+    const a = 1 - p.age / p.life;
+    ctx.globalAlpha = Math.max(0, a);
+    ctx.fillStyle = p.color;
+    if (p.kind === 'spark') {
+      // little star sparkle
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+      ctx.fill();
+    } else {
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.size * 1.6, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+  ctx.globalAlpha = 1;
+}
+
+// Full-screen confetti for win (separate from in-game particles so it survives state change)
+const confetti = [];
+function spawnConfetti(n = 120) {
+  const colors = ['#ff79c6', '#ffd166', '#9b5de5', '#00bbf9', '#06d6a0', '#ffe66d'];
+  for (let i = 0; i < n; i++) {
+    confetti.push({
+      x: Math.random() * W,
+      y: -20 - Math.random() * 200,
+      vx: (Math.random() - 0.5) * 80,
+      vy: 100 + Math.random() * 180,
+      rot: Math.random() * Math.PI * 2,
+      vr: (Math.random() - 0.5) * 6,
+      w: 8 + Math.random() * 6,
+      h: 12 + Math.random() * 8,
+      color: colors[Math.floor(Math.random() * colors.length)],
+      life: 4 + Math.random() * 3,
+      age: 0
+    });
+  }
+}
+function updateConfetti(dt) {
+  for (const c of confetti) {
+    c.age += dt;
+    c.vy += 40 * dt;
+    c.x += c.vx * dt;
+    c.y += c.vy * dt;
+    c.rot += c.vr * dt;
+  }
+  for (let i = confetti.length - 1; i >= 0; i--) {
+    if (confetti[i].age > confetti[i].life || confetti[i].y > H + 40) confetti.splice(i, 1);
+  }
+}
+function drawConfetti() {
+  for (const c of confetti) {
+    ctx.save();
+    ctx.translate(c.x, c.y);
+    ctx.rotate(c.rot);
+    ctx.fillStyle = c.color;
+    ctx.fillRect(-c.w/2, -c.h/2, c.w, c.h);
+    ctx.restore();
+  }
+}
+
+// ---------- Fairy Character ----------
+function flashFairy(mood) {
+  if (!game) return;
+  game.fairy.mood = mood;
+  game.fairy.moodT = 0;
+}
+function drawFairy(dt) {
+  const f = game.fairy;
+  f.bobT += dt;
+  f.moodT += dt;
+  if (f.moodT > 0.7 && f.mood !== 'dance') f.mood = 'idle';
+
+  const baseY = f.y + Math.sin(f.bobT * 2.5) * 6;
+  const baseX = f.x;
+
+  ctx.save();
+  ctx.translate(baseX, baseY);
+
+  // tilt / spin based on mood
+  if (f.mood === 'happy') ctx.rotate(Math.sin(f.moodT * 25) * 0.3);
+  else if (f.mood === 'sad') ctx.rotate(Math.sin(f.moodT * 18) * 0.15);
+  else if (f.mood === 'dance') ctx.rotate(Math.sin(f.bobT * 6) * 0.4);
+
+  // wings
+  const wingFlap = Math.sin(f.bobT * (f.mood === 'happy' || f.mood === 'dance' ? 22 : 8)) * 0.3;
+  ctx.save();
+  ctx.fillStyle = 'rgba(255, 192, 240, 0.75)';
+  ctx.strokeStyle = '#ff79c6'; ctx.lineWidth = 2;
+  // left wing
+  ctx.save();
+  ctx.translate(-12, -8);
+  ctx.rotate(-0.4 + wingFlap);
+  ctx.beginPath(); ctx.ellipse(-14, 0, 18, 28, 0, 0, Math.PI*2); ctx.fill(); ctx.stroke();
+  ctx.restore();
+  // right wing
+  ctx.save();
+  ctx.translate(12, -8);
+  ctx.rotate(0.4 - wingFlap);
+  ctx.beginPath(); ctx.ellipse(14, 0, 18, 28, 0, 0, Math.PI*2); ctx.fill(); ctx.stroke();
+  ctx.restore();
+  ctx.restore();
+
+  // body / dress
+  ctx.fillStyle = '#ff79c6';
+  ctx.beginPath();
+  ctx.moveTo(-14, 0); ctx.lineTo(14, 0);
+  ctx.lineTo(22, 26); ctx.lineTo(-22, 26); ctx.closePath();
+  ctx.fill();
+
+  // head
+  ctx.fillStyle = '#ffd9b3';
+  ctx.beginPath(); ctx.arc(0, -10, 14, 0, Math.PI*2); ctx.fill();
+
+  // hair
+  ctx.fillStyle = '#7e2a8f';
+  ctx.beginPath();
+  ctx.arc(0, -14, 14, Math.PI, 0); ctx.lineTo(14, -8);
+  ctx.quadraticCurveTo(0, -22, -14, -8); ctx.closePath();
+  ctx.fill();
+
+  // eyes
+  if (f.mood === 'sad') {
+    // covered
+    ctx.fillStyle = '#ffd9b3';
+    ctx.fillRect(-8, -12, 16, 4);
+  } else {
+    ctx.fillStyle = '#222';
+    ctx.beginPath(); ctx.arc(-5, -10, 1.8, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.arc(5, -10, 1.8, 0, Math.PI*2); ctx.fill();
+  }
+  // mouth
+  ctx.strokeStyle = '#a8004f'; ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  if (f.mood === 'happy' || f.mood === 'dance') {
+    ctx.arc(0, -5, 4, 0, Math.PI);
+  } else if (f.mood === 'sad') {
+    ctx.arc(0, -3, 3, Math.PI, 0);
+  } else {
+    ctx.moveTo(-2, -5); ctx.lineTo(2, -5);
+  }
+  ctx.stroke();
+
+  // wand
+  ctx.strokeStyle = '#7e2a8f'; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.moveTo(16, 8); ctx.lineTo(28, -10); ctx.stroke();
+  ctx.fillStyle = '#ffd166';
+  ctx.font = '14px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillText('⭐', 30, -12);
+
+  ctx.restore();
+}
+
+// ---------- Serving Scene (Princess receives her dish!) ----------
+function drawPrincess(cx, cy, scale, dt, mood) {
+  // mood: 'wait' | 'open' | 'happy'
+  const s = scale;
+  ctx.save();
+  ctx.translate(cx, cy);
+  ctx.scale(s, s);
+
+  const t = performance.now() / 1000;
+  // subtle bob
+  ctx.translate(0, Math.sin(t * 1.6) * 2);
+
+  // wings (behind body) - big and shimmery
+  const flap = Math.sin(t * 3) * 0.18;
+  ctx.save();
+  const wg = ctx.createRadialGradient(0, -30, 5, 0, -30, 90);
+  wg.addColorStop(0, 'rgba(255,255,255,.9)');
+  wg.addColorStop(1, 'rgba(255,180,230,.55)');
+  ctx.fillStyle = wg;
+  ctx.strokeStyle = '#ff79c6'; ctx.lineWidth = 2;
+  // left wing
+  ctx.save();
+  ctx.translate(-22, -20); ctx.rotate(-0.55 + flap);
+  ctx.beginPath(); ctx.ellipse(-32, -10, 38, 64, 0, 0, Math.PI*2); ctx.fill(); ctx.stroke();
+  ctx.beginPath(); ctx.ellipse(-22, 28, 26, 44, 0, 0, Math.PI*2); ctx.fill(); ctx.stroke();
+  ctx.restore();
+  // right wing
+  ctx.save();
+  ctx.translate(22, -20); ctx.rotate(0.55 - flap);
+  ctx.beginPath(); ctx.ellipse(32, -10, 38, 64, 0, 0, Math.PI*2); ctx.fill(); ctx.stroke();
+  ctx.beginPath(); ctx.ellipse(22, 28, 26, 44, 0, 0, Math.PI*2); ctx.fill(); ctx.stroke();
+  ctx.restore();
+  ctx.restore();
+
+  // Gown (long flowing dress)
+  const gownGrad = ctx.createLinearGradient(0, -10, 0, 120);
+  gownGrad.addColorStop(0, '#ff8fd0');
+  gownGrad.addColorStop(1, '#b48cff');
+  ctx.fillStyle = gownGrad;
+  ctx.beginPath();
+  ctx.moveTo(-28, 0);
+  ctx.lineTo(28, 0);
+  ctx.lineTo(70, 120);
+  ctx.lineTo(-70, 120);
+  ctx.closePath();
+  ctx.fill();
+  // gown sparkles
+  ctx.fillStyle = 'rgba(255,255,255,.85)';
+  for (let i = 0; i < 6; i++) {
+    const tx = -50 + ((i * 23 + Math.floor(t*2)*7) % 100);
+    const ty = 30 + ((i * 17) % 70);
+    ctx.beginPath(); ctx.arc(tx, ty, 1.6, 0, Math.PI*2); ctx.fill();
+  }
+  // gown collar
+  ctx.fillStyle = '#fff';
+  ctx.beginPath(); ctx.moveTo(-28, 0); ctx.lineTo(28, 0); ctx.lineTo(20, 10); ctx.lineTo(-20, 10); ctx.closePath(); ctx.fill();
+
+  // Arms (holding position)
+  ctx.fillStyle = '#ffd9b3';
+  ctx.beginPath(); ctx.ellipse(-34, 30, 8, 22, -0.3, 0, Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(34, 30, 8, 22, 0.3, 0, Math.PI*2); ctx.fill();
+  // hands
+  ctx.beginPath(); ctx.arc(-42, 48, 7, 0, Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.arc(42, 48, 7, 0, Math.PI*2); ctx.fill();
+
+  // Neck
+  ctx.fillRect(-6, -10, 12, 12);
+
+  // Head
+  ctx.fillStyle = '#ffd9b3';
+  ctx.beginPath(); ctx.arc(0, -28, 22, 0, Math.PI*2); ctx.fill();
+
+  // Hair — drawn as a cap on top + long side locks, leaving the face clear
+  ctx.fillStyle = '#7e2a8f';
+  // long side locks (sit below jaw line, going down past shoulders)
+  ctx.beginPath(); ctx.ellipse(-22, 8, 9, 28, -0.15, 0, Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.ellipse( 22, 8, 9, 28,  0.15, 0, Math.PI*2); ctx.fill();
+  // cap — sits like a hat on the top of the head, with a wavy fringe just above the eyes
+  // Head: center (0,-28) radius 22. Hairline ~ y=-38 (10px above center), eyes at y=-28.
+  // Arc from angle (π+0.5) clockwise to (-0.5) traces only the TOP ~⅔ of the head.
+  ctx.beginPath();
+  const a0 = Math.PI + 0.5;   // ~208°  -> point near (-20.2, -39)
+  const a1 = -0.5;            // ~332°  -> point near ( 20.2, -39)
+  ctx.arc(0, -28, 23, a0, a1, false); // clockwise through top of head
+  // Wavy fringe back across the forehead (right -> left)
+  ctx.quadraticCurveTo( 12, -33,  6, -37);
+  ctx.quadraticCurveTo(  0, -32, -6, -37);
+  ctx.quadraticCurveTo(-12, -33, -20.2, -39);
+  ctx.closePath();
+  ctx.fill();
+
+  // CROWN ✨
+  ctx.fillStyle = '#ffd166';
+  ctx.strokeStyle = '#b88a1a'; ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.moveTo(-18, -44);
+  ctx.lineTo(-12, -58);
+  ctx.lineTo(-6, -46);
+  ctx.lineTo(0, -62);
+  ctx.lineTo(6, -46);
+  ctx.lineTo(12, -58);
+  ctx.lineTo(18, -44);
+  ctx.closePath();
+  ctx.fill(); ctx.stroke();
+  // crown gems
+  ctx.fillStyle = '#ff3aa1';
+  ctx.beginPath(); ctx.arc(0, -52, 2.5, 0, Math.PI*2); ctx.fill();
+  ctx.fillStyle = '#00bbf9';
+  ctx.beginPath(); ctx.arc(-12, -50, 2, 0, Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.arc(12, -50, 2, 0, Math.PI*2); ctx.fill();
+
+  // Eyes
+  if (mood === 'happy') {
+    // closed happy eyes ^_^
+    ctx.strokeStyle = '#222'; ctx.lineWidth = 2; ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.arc(-8, -28, 4, Math.PI*1.1, Math.PI*1.9); ctx.stroke();
+    ctx.beginPath(); ctx.arc( 8, -28, 4, Math.PI*1.1, Math.PI*1.9); ctx.stroke();
+  } else {
+    ctx.fillStyle = '#fff';
+    ctx.beginPath(); ctx.arc(-8, -28, 4, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.arc( 8, -28, 4, 0, Math.PI*2); ctx.fill();
+    ctx.fillStyle = '#2a1144';
+    ctx.beginPath(); ctx.arc(-8, -27, 2.2, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.arc( 8, -27, 2.2, 0, Math.PI*2); ctx.fill();
+    // sparkle
+    ctx.fillStyle = '#fff';
+    ctx.beginPath(); ctx.arc(-7, -28, 0.8, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.arc( 9, -28, 0.8, 0, Math.PI*2); ctx.fill();
+  }
+  // Cheeks
+  ctx.fillStyle = 'rgba(255,120,180,.5)';
+  ctx.beginPath(); ctx.arc(-13, -22, 3.5, 0, Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.arc( 13, -22, 3.5, 0, Math.PI*2); ctx.fill();
+
+  // Mouth
+  ctx.strokeStyle = '#a8004f'; ctx.lineWidth = 2; ctx.lineCap = 'round';
+  ctx.fillStyle = '#a8004f';
+  if (mood === 'open') {
+    // open mouth (about to eat)
+    ctx.beginPath(); ctx.ellipse(0, -18, 5, 6, 0, 0, Math.PI*2); ctx.fill();
+  } else if (mood === 'happy') {
+    // big smile
+    ctx.beginPath(); ctx.arc(0, -19, 7, 0, Math.PI); ctx.stroke();
+  } else {
+    // gentle smile
+    ctx.beginPath(); ctx.arc(0, -19, 4, 0.1, Math.PI - 0.1); ctx.stroke();
+  }
+
+  ctx.restore();
+}
+
+function drawThroneScene() {
+  // Royal background gradient
+  const g = ctx.createLinearGradient(0, 0, 0, H);
+  g.addColorStop(0, '#5a2d8c');
+  g.addColorStop(0.5, '#8e4ec6');
+  g.addColorStop(1, '#3a1a5e');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, W, H);
+
+  // Curtains (left & right)
+  const curtainW = Math.min(120, W * 0.18);
+  const cg = ctx.createLinearGradient(0, 0, curtainW, 0);
+  cg.addColorStop(0, '#7a1a3e'); cg.addColorStop(1, '#c2185b');
+  ctx.fillStyle = cg;
+  ctx.fillRect(0, 0, curtainW, H);
+  const cg2 = ctx.createLinearGradient(W - curtainW, 0, W, 0);
+  cg2.addColorStop(0, '#c2185b'); cg2.addColorStop(1, '#7a1a3e');
+  ctx.fillStyle = cg2;
+  ctx.fillRect(W - curtainW, 0, curtainW, H);
+  // curtain folds
+  ctx.fillStyle = 'rgba(0,0,0,.18)';
+  for (let i = 0; i < 5; i++) {
+    ctx.fillRect(i * (curtainW / 5) + 2, 0, 3, H);
+    ctx.fillRect(W - curtainW + i * (curtainW / 5) + 2, 0, 3, H);
+  }
+  // curtain rod & tassels (top)
+  ctx.fillStyle = '#ffd166';
+  ctx.fillRect(0, 22, W, 8);
+  ctx.beginPath(); ctx.arc(curtainW + 10, 30, 10, 0, Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.arc(W - curtainW - 10, 30, 10, 0, Math.PI*2); ctx.fill();
+
+  // Floor (checker tiles in perspective)
+  const floorY = H * 0.72;
+  const floorGrad = ctx.createLinearGradient(0, floorY, 0, H);
+  floorGrad.addColorStop(0, '#5b3477'); floorGrad.addColorStop(1, '#2a1147');
+  ctx.fillStyle = floorGrad;
+  ctx.fillRect(0, floorY, W, H - floorY);
+  // tile lines
+  ctx.strokeStyle = 'rgba(255,255,255,.12)'; ctx.lineWidth = 1;
+  const vp = W / 2;
+  for (let i = -8; i <= 8; i++) {
+    const x = vp + i * 60;
+    ctx.beginPath();
+    ctx.moveTo(x, floorY);
+    ctx.lineTo(vp + (x - vp) * 4, H);
+    ctx.stroke();
+  }
+  for (let i = 1; i <= 6; i++) {
+    const y = floorY + Math.pow(i / 6, 2) * (H - floorY);
+    ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke();
+  }
+
+  // Throne
+  const throneCX = W / 2;
+  const throneCY = H * 0.55;
+  const throneW = Math.min(W * 0.4, 220);
+  const throneH = Math.min(H * 0.55, 320);
+  // throne back
+  ctx.fillStyle = '#5a2a8c';
+  ctx.beginPath();
+  ctx.moveTo(throneCX - throneW/2, throneCY + throneH*0.2);
+  ctx.lineTo(throneCX - throneW/2, throneCY - throneH*0.45);
+  ctx.quadraticCurveTo(throneCX, throneCY - throneH*0.75, throneCX + throneW/2, throneCY - throneH*0.45);
+  ctx.lineTo(throneCX + throneW/2, throneCY + throneH*0.2);
+  ctx.closePath();
+  ctx.fill();
+  // throne gold trim
+  ctx.strokeStyle = '#ffd166'; ctx.lineWidth = 4;
+  ctx.stroke();
+  // cushion seat
+  ctx.fillStyle = '#ff79c6';
+  ctx.beginPath();
+  ctx.ellipse(throneCX, throneCY + throneH*0.18, throneW*0.55, 18, 0, 0, Math.PI*2);
+  ctx.fill();
+  // throne side jewels
+  ctx.fillStyle = '#ffd166';
+  ctx.beginPath(); ctx.arc(throneCX, throneCY - throneH*0.55, 8, 0, Math.PI*2); ctx.fill();
+  ctx.fillStyle = '#ff3aa1';
+  ctx.beginPath(); ctx.arc(throneCX, throneCY - throneH*0.55, 4, 0, Math.PI*2); ctx.fill();
+
+  return { throneCX, throneCY, throneW, throneH };
+}
+
+function drawServingScene(dt) {
+  serving.t += dt;
+  const T = serving.t;
+
+  // Background + throne
+  const { throneCX, throneCY, throneW, throneH } = drawThroneScene();
+
+  // Phase timing
+  // 0.0 - 0.6 : fade in
+  // 0.6 - 1.8 : plate rises from bottom to center-low
+  // 1.8 - 2.6 : plate floats up toward princess (her mouth opens)
+  // 2.6 - 3.2 : she "eats" (dish shrinks & disappears)
+  // 3.2 - 4.0 : hearts/sparkles burst, happy face, speech bubble
+  // 4.0+      : show "tap to continue" hint, auto-advance at 6s
+
+  // Princess mood
+  let mood = 'wait';
+  if (T >= 1.8 && T < 2.8) mood = 'open';
+  else if (T >= 2.8) mood = 'happy';
+
+  // Princess size (responsive)
+  const pScale = Math.min(1.4, Math.max(0.9, H / 700));
+  drawPrincess(throneCX, throneCY - 10, pScale, dt, mood);
+
+  // Plate animation
+  const plateBaseY = H * 0.85;
+  const plateHandY = throneCY + 20; // around her hands
+  let plateY;
+  if (T < 0.6) {
+    plateY = H + 80; // off-screen
+  } else if (T < 1.8) {
+    const k = Math.min(1, (T - 0.6) / 1.2);
+    const eased = 1 - Math.pow(1 - k, 3);
+    plateY = H + 80 + (plateBaseY - (H + 80)) * eased;
+  } else if (T < 2.6) {
+    const k = (T - 1.8) / 0.8;
+    const eased = k * k * (3 - 2 * k); // smoothstep
+    plateY = plateBaseY + (plateHandY - plateBaseY) * eased;
+  } else {
+    plateY = plateHandY;
+  }
+
+  // Dish scale (shrinks as she eats)
+  let dishOpacity = 1;
+  let dishScale = 1;
+  if (T >= 2.6 && T < 3.2) {
+    const k = (T - 2.6) / 0.6;
+    dishScale = 1 - k;
+    dishOpacity = 1 - k;
+  } else if (T >= 3.2) {
+    dishOpacity = 0;
+  }
+
+  // Draw plate (with hands holding it from below when high)
+  if (T >= 0.6) {
+    const plateCX = throneCX;
+    // bob
+    const bob = T > 2.6 ? 0 : Math.sin(T * 6) * 2;
+    const py = plateY + bob;
+
+    ctx.save();
+    // plate shadow on floor (while down low)
+    if (py > H * 0.7) {
+      ctx.globalAlpha = 0.25;
+      ctx.fillStyle = '#000';
+      ctx.beginPath();
+      ctx.ellipse(plateCX, Math.min(H - 14, py + 32), 70, 10, 0, 0, Math.PI*2);
+      ctx.fill();
+      ctx.globalAlpha = 1;
+    }
+    // platter
+    const platerGrad = ctx.createLinearGradient(0, py - 10, 0, py + 18);
+    platerGrad.addColorStop(0, '#f8f8ff');
+    platerGrad.addColorStop(1, '#b8b8d8');
+    ctx.fillStyle = platerGrad;
+    ctx.beginPath();
+    ctx.ellipse(plateCX, py + 8, 80, 14, 0, 0, Math.PI*2);
+    ctx.fill();
+    ctx.strokeStyle = '#ffd166'; ctx.lineWidth = 3;
+    ctx.stroke();
+    // platter top surface
+    ctx.fillStyle = '#fff';
+    ctx.beginPath();
+    ctx.ellipse(plateCX, py + 4, 70, 10, 0, 0, Math.PI*2);
+    ctx.fill();
+
+    // Dish (recipe icon + needed ingredients arranged on top)
+    ctx.globalAlpha = dishOpacity;
+    ctx.save();
+    ctx.translate(plateCX, py - 6);
+    ctx.scale(dishScale, dishScale);
+    ctx.font = '64px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText(serving.recipe.icon, 0, 0);
+    // garnish ingredients around the icon
+    ctx.font = '22px sans-serif';
+    const garnish = serving.recipe.needed;
+    for (let i = 0; i < garnish.length; i++) {
+      const ang = (i / garnish.length) * Math.PI * 2 - Math.PI / 2;
+      const gx = Math.cos(ang) * 38;
+      const gy = Math.sin(ang) * 18 + 10;
+      ctx.fillText(garnish[i], gx, gy);
+    }
+    ctx.restore();
+    ctx.globalAlpha = 1;
+    ctx.restore();
+  }
+
+  // Floating sparkles around scene throughout
+  if (Math.random() < 0.4) {
+    serving.sparks.push({
+      x: Math.random() * W,
+      y: H * 0.3 + Math.random() * H * 0.5,
+      vy: -20 - Math.random() * 40,
+      life: 1 + Math.random(),
+      age: 0,
+      size: 1 + Math.random() * 2.5
+    });
+  }
+  for (const s of serving.sparks) {
+    s.age += dt; s.y += s.vy * dt;
+  }
+  serving.sparks = serving.sparks.filter(s => s.age < s.life);
+  for (const s of serving.sparks) {
+    ctx.globalAlpha = (1 - s.age / s.life) * 0.9;
+    ctx.fillStyle = '#fff';
+    ctx.beginPath(); ctx.arc(s.x, s.y, s.size, 0, Math.PI*2); ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+
+  // Hearts burst when she's happy (radiate outward & upward from above her head)
+  if (T >= 3.0 && serving.hearts.length < 24) {
+    if (Math.random() < 0.4) {
+      const ang = -Math.PI / 2 + (Math.random() - 0.5) * Math.PI * 1.1;
+      const speed = 140 + Math.random() * 120;
+      serving.hearts.push({
+        x: throneCX + (Math.random() - 0.5) * 60,
+        y: throneCY - throneH * 0.55,           // above her crown
+        vx: Math.cos(ang) * speed,
+        vy: Math.sin(ang) * speed,
+        rot: (Math.random() - 0.5) * 0.6,
+        life: 1.8, age: 0,
+        emoji: Math.random() < 0.5 ? '💖' : (Math.random() < 0.5 ? '✨' : '⭐'),
+        size: 22 + Math.random() * 14
+      });
+    }
+  }
+  for (const h of serving.hearts) {
+    h.age += dt;
+    h.vy += 40 * dt;
+    h.x += h.vx * dt;
+    h.y += h.vy * dt;
+  }
+  serving.hearts = serving.hearts.filter(h => h.age < h.life);
+  for (const h of serving.hearts) {
+    ctx.save();
+    ctx.globalAlpha = 1 - h.age / h.life;
+    ctx.translate(h.x, h.y);
+    ctx.rotate(h.rot * h.age);
+    ctx.font = `${h.size}px sans-serif`;
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText(h.emoji, 0, 0);
+    ctx.restore();
+  }
+  ctx.globalAlpha = 1;
+
+  // Speech bubble when happy
+  if (T >= 3.0) {
+    const bx = throneCX + throneW * 0.55;
+    const by = throneCY - throneH * 0.25;
+    const popK = Math.min(1, (T - 3.0) / 0.35);
+    const ps = popK < 1 ? (1.2 - Math.abs(0.5 - popK) * 0.4) : 1;
+    ctx.save();
+    ctx.translate(bx, by);
+    ctx.scale(ps, ps);
+    ctx.fillStyle = '#fff';
+    ctx.strokeStyle = '#ff79c6'; ctx.lineWidth = 3;
+    // bubble
+    ctx.beginPath();
+    if (ctx.roundRect) {
+      ctx.roundRect(-10, -28, 130, 50, 14);
+    } else {
+      ctx.rect(-10, -28, 130, 50);
+    }
+    ctx.fill(); ctx.stroke();
+    // tail
+    ctx.beginPath();
+    ctx.moveTo(0, 5); ctx.lineTo(-14, 18); ctx.lineTo(8, 8); ctx.closePath();
+    ctx.fill(); ctx.stroke();
+    ctx.fillStyle = '#7e2a8f';
+    ctx.font = 'bold 18px "Comic Sans MS", sans-serif';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText('Yummy! 💖', 55, -3);
+    ctx.restore();
+  }
+
+  // Title banner
+  ctx.save();
+  ctx.fillStyle = 'rgba(0,0,0,.35)';
+  ctx.fillRect(0, 50, W, 56);
+  ctx.fillStyle = '#fff';
+  ctx.font = 'bold 24px "Comic Sans MS", sans-serif';
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillText(`A ${serving.recipe.name} for the Princess! ${serving.recipe.icon}`, W/2, 78);
+  ctx.restore();
+
+  // Show "tap to continue" hint
+  if (T >= 4.0) {
+    document.getElementById('serving-hint').style.opacity = '1';
+  }
+  // auto-advance
+  if (T >= 6.0 && !serving.advanced) {
+    serving.advanced = true;
+    winLevel();
+  }
+}
+
+// ---------- HUD ----------
+function drawHUD() {
+  // Top bar
+  ctx.fillStyle = 'rgba(255,255,255,.7)';
+  ctx.fillRect(0, 0, W, 56);
+
+  ctx.fillStyle = '#7e2a8f';
+  ctx.font = 'bold 18px "Comic Sans MS", sans-serif';
+  ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+  ctx.fillText(`Recipe: ${game.recipe.name}`, 14, 18);
+
+  // Timer
+  ctx.textAlign = 'center';
+  const mm = Math.floor(game.timeLeft / 60);
+  const ss = Math.max(0, Math.floor(game.timeLeft % 60));
+  ctx.fillStyle = game.timeLeft < 10 ? '#d32f2f' : '#7e2a8f';
+  ctx.font = 'bold 22px "Comic Sans MS", sans-serif';
+  ctx.fillText(`⏱ ${String(mm).padStart(1,'0')}:${String(ss).padStart(2,'0')}`, W/2, 28);
+
+  // Recipe checklist
+  ctx.textAlign = 'left';
+  ctx.font = '22px sans-serif';
+  const startX = 14;
+  const y = 44;
+  for (let i = 0; i < game.recipe.needed.length; i++) {
+    const e = game.recipe.needed[i];
+    const got = game.caughtSet.has(e);
+    ctx.globalAlpha = got ? 1 : 0.35;
+    ctx.fillText(e, startX + i * 30, y);
+    if (got) {
+      ctx.globalAlpha = 1;
+      ctx.font = '14px sans-serif';
+      ctx.fillStyle = '#06b66c';
+      ctx.fillText('✓', startX + i * 30 + 16, y - 8);
+      ctx.font = '22px sans-serif';
+      ctx.fillStyle = '#7e2a8f';
+    }
+  }
+  ctx.globalAlpha = 1;
+
+  // Bottom bar
+  ctx.fillStyle = 'rgba(255,255,255,.7)';
+  ctx.fillRect(0, H - 44, W, 44);
+  ctx.fillStyle = '#7e2a8f';
+  ctx.font = 'bold 18px "Comic Sans MS", sans-serif';
+  ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+  ctx.fillText(`Score: ${game.score}`, 14, H - 22);
+
+  ctx.textAlign = 'right';
+  let hearts = '';
+  for (let i = 0; i < 3; i++) hearts += i < game.lives ? '❤️' : '🤍';
+  ctx.font = '22px sans-serif';
+  ctx.fillText(hearts, W - 14, H - 22);
+}
+
+// ---------- Background ----------
+function drawBackground() {
+  const [a, b] = game ? game.bgGradient : ['#ffe8f5', '#ffd1f0'];
+  const g = ctx.createLinearGradient(0, 0, 0, H);
+  g.addColorStop(0, a); g.addColorStop(1, b);
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, W, H);
+
+  // sparkly stars
+  const t = performance.now() / 1000;
+  for (let i = 0; i < 22; i++) {
+    const sx = ((i * 97) % W);
+    const sy = ((i * 53) % (H - 100)) + 60;
+    const tw = 0.5 + 0.5 * Math.sin(t * 2 + i);
+    ctx.globalAlpha = 0.25 + 0.5 * tw;
+    ctx.fillStyle = '#fff';
+    ctx.beginPath(); ctx.arc(sx, sy, 1.5 + tw * 1.5, 0, Math.PI*2); ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+}
+
+// ---------- Draw Ingredients ----------
+function drawIngredients() {
+  for (const it of game.ingredients) {
+    if (it.missed) continue;
+    ctx.save();
+    ctx.translate(it.x, it.y);
+    ctx.rotate(it.rot);
+    if (it.caught) {
+      // shrink fade
+      it.fadeT = (it.fadeT || 0) + (1/60);
+      const k = Math.max(0, 1 - it.fadeT * 4);
+      ctx.globalAlpha = k;
+      ctx.scale(1 + (1-k)*0.5, 1 + (1-k)*0.5);
+      if (it.fadeT > 0.3) it.fadeDone = true;
+    }
+    // soft shadow
+    ctx.font = `${it.size}px sans-serif`;
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText(it.emoji, 0, 0);
+    ctx.restore();
+  }
+}
+
+// ---------- Input ----------
+function handleTap(x, y) {
+  if (state !== STATES.PLAYING || !game) return;
+  // resume audio on first interaction
+  if (audio() && audio().state === 'suspended') audio().resume();
+
+  const R = 50;
+  let hit = null;
+  let bestDist = R * R;
+  for (const it of game.ingredients) {
+    if (it.caught || it.missed) continue;
+    const dx = it.x - x, dy = it.y - y;
+    const d2 = dx*dx + dy*dy;
+    const radius = Math.max(R, it.size * 0.7);
+    if (d2 <= radius * radius && d2 < bestDist) {
+      hit = it; bestDist = d2;
+    }
+  }
+  if (!hit) return;
+
+  hit.caught = true;
+  if (hit.isCorrect) {
+    game.score += 50;
+    // Only progress recipe if it's a NEW needed item not yet collected
+    if (!game.caughtSet.has(hit.emoji)) {
+      game.caughtSet.add(hit.emoji);
+      game.caughtCount++;
+      game.score += 50; // bonus for fresh ingredient
+    }
+    burst(hit.x, hit.y, '#ffd166', 22, 'spark');
+    burst(hit.x, hit.y, '#fff', 10, 'spark');
+    playChime();
+    flashFairy('happy');
+    if (game.caughtSet.size >= game.recipe.needed.length) {
+      enterServing();
+    }
+  } else {
+    game.lives--;
+    game.score = Math.max(0, game.score - 20);
+    burst(hit.x, hit.y, '#6ed36e', 18, 'spark');
+    burst(hit.x, hit.y, '#888', 10, 'puff');
+    playWrong();
+    flashFairy('sad');
+    if (game.lives <= 0) endGame(false);
+  }
+}
+
+canvas.addEventListener('touchstart', e => {
+  e.preventDefault();
+  if (state === STATES.SERVING) { advanceServing(); return; }
+  for (const t of e.changedTouches) handleTap(t.clientX, t.clientY);
+}, { passive: false });
+canvas.addEventListener('mousedown', e => {
+  if (state === STATES.SERVING) { advanceServing(); return; }
+  handleTap(e.clientX, e.clientY);
+});
+
+// prevent scroll/zoom gestures
+document.addEventListener('gesturestart', e => e.preventDefault());
+document.addEventListener('touchmove', e => { if (state === STATES.PLAYING) e.preventDefault(); }, { passive: false });
+
+// ---------- Game Loop ----------
+let lastT = performance.now();
+function loop(now) {
+  const dt = Math.min(0.05, (now - lastT) / 1000);
+  lastT = now;
+
+  ctx.clearRect(0, 0, W, H);
+
+  if (state === STATES.SERVING && serving) {
+    drawServingScene(dt);
+  } else if (game) {
+    drawBackground();
+
+    if (state === STATES.PLAYING) {
+      // timer
+      game.timeLeft -= dt;
+      if (game.timeLeft <= 0) { game.timeLeft = 0; endGame(false); }
+
+      // spawn
+      game.lastSpawn += dt * 1000;
+      if (game.lastSpawn >= game.recipe.spawnEvery) {
+        spawnIngredient();
+        game.lastSpawn = 0;
+      }
+
+      updateIngredients(dt);
+    }
+
+    updateParticles(dt);
+    drawIngredients();
+    drawParticles();
+    drawFairy(dt);
+    drawHUD();
+  } else {
+    drawBackground();
+  }
+
+  // confetti overlay (during win)
+  if (confetti.length) {
+    updateConfetti(dt);
+    drawConfetti();
+  }
+
+  requestAnimationFrame(loop);
+}
+requestAnimationFrame(loop);
+
+// ---------- State Transitions ----------
+function show(id) {
+  document.querySelectorAll('.overlay').forEach(o => o.classList.remove('show'));
+  if (id) document.getElementById(id).classList.add('show');
+}
+
+function startLevel(idx) {
+  newGame(idx);
+  state = STATES.PLAYING;
+  show(null);
+  // kick audio
+  if (audio() && audio().state === 'suspended') audio().resume();
+}
+
+function enterServing() {
+  state = STATES.SERVING;
+  // clear gameplay clutter
+  if (game) { game.ingredients = []; game.particles = []; }
+  flashFairy('dance');
+  playChime();
+  // schedule a sweet jingle as the dish arrives
+  setTimeout(() => playChime(), 1100);
+  setTimeout(() => playFanfare(), 2400);
+  serving = {
+    t: 0,
+    advanced: false,
+    hearts: [],
+    sparks: [],
+    recipe: game.recipe,
+    dishY: H + 80,    // plate starts below screen
+    dishScale: 1,
+    eatPhase: 0       // 0 idle, 1 bite, 2 chew, 3 happy
+  };
+  document.getElementById('serving-hint').style.opacity = '0';
+  show('screen-serving');
+}
+
+function advanceServing() {
+  if (!serving || serving.advanced) return;
+  // only allow once cinematic has played enough
+  if (serving.t < 1.2) return;
+  serving.advanced = true;
+  winLevel();
+}
+
+function winLevel() {
+  state = STATES.LEVEL_WIN;
+  serving = null;
+  flashFairy('dance');
+  playFanfare();
+  spawnConfetti(160);
+  // unlock next
+  if (game.levelIdx + 1 >= save.unlocked && game.levelIdx + 1 < RECIPES.length) {
+    save.unlocked = game.levelIdx + 2;
+  }
+  if (game.score > save.hiScore) save.hiScore = game.score;
+  saveProgress();
+
+  document.getElementById('win-recipe-name').textContent = `${game.recipe.name} unlocked!`;
+  document.getElementById('win-recipe-emojis').textContent = game.recipe.needed.join(' ');
+  const btnRow = document.getElementById('win-buttons');
+  btnRow.style.opacity = '0';
+  const isLast = game.levelIdx + 1 >= RECIPES.length;
+  document.getElementById('btn-next').textContent = isLast ? '🏆 Finish' : 'Next Level →';
+  show('screen-win');
+  setTimeout(() => { btnRow.style.opacity = '1'; }, 1800);
+}
+
+function endGame(won) {
+  if (won) return winLevel();
+  state = STATES.GAME_OVER;
+  playGameOver();
+  if (game.score > save.hiScore) { save.hiScore = game.score; saveProgress(); }
+  document.getElementById('gameover-msg').textContent =
+    game.lives <= 0 ? 'The fairy lost all her hearts!' : 'Out of time!';
+  document.getElementById('gameover-score').textContent =
+    `Score: ${game.score}   ·   Best: ${save.hiScore}`;
+  show('screen-gameover');
+}
+
+function goHome() {
+  serving = null;
+  state = STATES.START;
+  game = null;
+  confetti.length = 0;
+  show('screen-start');
+}
+
+function buildLevels() {
+  const grid = document.getElementById('levels-grid');
+  grid.innerHTML = '';
+  RECIPES.forEach((r, i) => {
+    const locked = i + 1 > save.unlocked;
+    const card = document.createElement('div');
+    card.className = 'level-card' + (locked ? ' locked' : '');
+    card.innerHTML = `<span class="lvl-emoji">${locked ? '🔒' : r.icon}</span>Level ${i+1}<br>${r.name}`;
+    if (!locked) card.addEventListener('click', () => startLevel(i));
+    grid.appendChild(card);
+  });
+}
+
+function buildBook() {
+  const box = document.getElementById('book-content');
+  box.innerHTML = '';
+  RECIPES.forEach((r, i) => {
+    const unlocked = i + 1 <= save.unlocked || i + 1 < save.unlocked;
+    const known = i + 1 < save.unlocked; // beaten
+    const card = document.createElement('div');
+    card.className = 'recipe-card';
+    card.style.marginBottom = '14px';
+    card.innerHTML = known
+      ? `<div class="emojis">${r.icon} ${r.needed.join(' ')}</div>
+         <div class="label"><b>${r.name}</b> — Level ${i+1} ✨</div>`
+      : `<div class="emojis">🔒</div>
+         <div class="label">Beat Level ${i+1} to unlock <b>${r.name}</b></div>`;
+    box.appendChild(card);
+  });
+}
+
+// ---------- Button wiring ----------
+document.getElementById('btn-start').addEventListener('click', () => {
+  buildLevels(); show('screen-levels');
+});
+document.getElementById('btn-recipes').addEventListener('click', () => {
+  buildBook(); show('screen-book');
+});
+document.getElementById('btn-levels-back').addEventListener('click', goHome);
+document.getElementById('btn-book-back').addEventListener('click', goHome);
+document.getElementById('btn-next').addEventListener('click', () => {
+  confetti.length = 0;
+  const nextIdx = game.levelIdx + 1;
+  if (nextIdx >= RECIPES.length) { goHome(); }
+  else startLevel(nextIdx);
+});
+document.getElementById('btn-win-home').addEventListener('click', goHome);
+document.getElementById('btn-retry').addEventListener('click', () => {
+  const idx = game ? game.levelIdx : 0;
+  startLevel(idx);
+});
+document.getElementById('btn-go-home').addEventListener('click', goHome);
+
+// Service worker (best-effort)
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('sw.js').catch(() => {});
+  });
+}
+</script>
+</body>
+</html>
