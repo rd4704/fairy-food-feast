@@ -1,5 +1,5 @@
 // Fairy Food Feast — Service Worker
-const CACHE = 'fairy-food-feast-v4';
+const CACHE = 'fairy-food-feast-v5';
 const ASSETS = [
   './',
   './index.html',
